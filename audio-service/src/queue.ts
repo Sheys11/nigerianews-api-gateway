@@ -4,11 +4,12 @@ dotenv.config();
 import { createClient } from "@supabase/supabase-js";
 import { generateAudioWithYarnGPT } from "./audio_generator";
 import { uploadAudioToR2 } from "./storage";
+import { validateEnv } from "./utils/env";
 
-const supabase = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_KEY!
-);
+// Validate environment variables at startup
+const env = validateEnv();
+
+const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_KEY);
 
 export async function processAudioQueue(): Promise<void> {
     console.log("\n========== AUDIO QUEUE PROCESSOR ==========\n");
@@ -84,5 +85,8 @@ export async function processAudioQueue(): Promise<void> {
 
 // Run if executed directly
 if (require.main === module) {
-    processAudioQueue();
+    processAudioQueue().catch((err) => {
+        console.error('[FATAL] Audio queue processing failed:', err);
+        process.exit(1);
+    });
 }
