@@ -5,19 +5,20 @@ import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { createClient } from "@supabase/supabase-js";
+import { validateEnv } from "./utils/env";
+
+// Validate environment variables at startup
+const env = validateEnv();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = env.PORT;
 
 // Initialize Supabase
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_KEY!
-);
+const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_KEY);
 
 // Middleware
 app.use(cors({
-  origin: "*", // Update with your frontend domain in production
+  origin: env.ALLOWED_ORIGINS,
   methods: ["GET"],
 }));
 
@@ -36,13 +37,32 @@ app.use(limiter);
 // ENDPOINTS
 // ============================================================================
 
-// Health check
-app.get("/health", (req: Request, res: Response) => {
-  res.json({
-    success: true,
-    message: "API is running",
-    timestamp: new Date().toISOString(),
-  });
+// Health check with database connectivity
+app.get("/health", async (req: Request, res: Response) => {
+  try {
+    // Check database connectivity
+    const { error } = await supabase
+      .from('categories')
+      .select('count')
+      .limit(1);
+
+    const isHealthy = !error;
+
+    res.status(isHealthy ? 200 : 503).json({
+      success: isHealthy,
+      message: isHealthy ? "API is running" : "Database unhealthy",
+      timestamp: new Date().toISOString(),
+      database: isHealthy ? "connected" : "disconnected",
+    });
+  } catch (err: any) {
+    res.status(503).json({
+      success: false,
+      message: "Service unavailable",
+      timestamp: new Date().toISOString(),
+      database: "error",
+      error: err.message,
+    });
+  }
 });
 
 // Get latest broadcast
@@ -126,33 +146,14 @@ app.get("/broadcasts/:id", async (req: Request, res: Response) => {
   }
 });
 
-// Get broadcasts by category
-app.get("/broadcasts/category/:category", async (req: Request, res: Response) => {
-  try {
-    const { category } = req.params;
-    const limit = parseInt(req.query.limit as string) || 10;
 
-    // This would require a categories table or filtering logic
-    // For now, returning a placeholder response
-    res.status(501).json({
-      success: false,
-      error: "Category filtering not yet implemented",
-      message: "This endpoint requires additional database schema setup",
-    });
-  } catch (err: any) {
-    console.error(`[API] Error fetching category ${req.params.category}:`, err);
-    res.status(500).json({
-      success: false,
-      error: err.message || "Internal server error",
-    });
-  }
-});
 
 // Get all published broadcasts (paginated)
 app.get("/broadcasts", async (req: Request, res: Response) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
+    // Validate and sanitize pagination parameters
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 10));
     const offset = (page - 1) * limit;
 
     const { data, error, count } = await supabase
@@ -208,11 +209,29 @@ app.use((req: Request, res: Response) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`\n========== API GATEWAY ==========`);
   console.log(`Server running on http://localhost:${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
+  console.log(`CORS origins: ${env.ALLOWED_ORIGINS.join(', ')}`);
   console.log(`=================================\n`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('\n[SHUTDOWN] SIGTERM received, closing server gracefully...');
+  server.close(() => {
+    console.log('[SHUTDOWN] Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('\n[SHUTDOWN] SIGINT received, closing server gracefully...');
+  server.close(() => {
+    console.log('[SHUTDOWN] Server closed');
+    process.exit(0);
+  });
 });
 
 export default app;

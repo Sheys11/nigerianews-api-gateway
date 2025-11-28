@@ -2,13 +2,15 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 import { createClient } from "@supabase/supabase-js";
-import fetch from "node-fetch";
+import { validateEnv } from "./utils/env";
+import { retry, fetchWithTimeout } from "./utils/retry";
+import { ingestTweetsFromScraper } from "./utils/scraper";
+
+// Validate environment variables at startup
+const env = validateEnv();
 
 // Initialize Supabase
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_KEY!
-);
+const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_KEY);
 
 export interface Tweet {
   tweet_id: string;
@@ -140,11 +142,16 @@ export async function scoreTweet(tweet: Tweet, categoryThresholdOverride?: numbe
   if (categoryThresholdOverride !== undefined) {
     categoryThreshold = categoryThresholdOverride;
   } else {
-    const { data: category } = await supabase
+    const { data: category, error } = await supabase
       .from("categories")
       .select("min_sources, confidence_threshold")
       .eq("name", primary)
       .single();
+
+    if (error) {
+      console.warn(`[SCORE] Failed to fetch category threshold for ${primary}:`, error.message);
+    }
+
     categoryThreshold = category?.confidence_threshold || 0.6;
   }
 
@@ -256,8 +263,20 @@ export async function clusterTweets(
 }
 
 // ============================================================================
-// STAGE 3: SUMMARIZATION (Using OpenAI or similar)
+// STAGE 3: SUMMARIZATION (Using Gemini)
 // ============================================================================
+
+interface GeminiResponse {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>;
+    };
+  }>;
+  error?: {
+    message: string;
+    code: number;
+  };
+}
 
 export async function summarizeCluster(
   cluster: Cluster,
@@ -276,7 +295,7 @@ export async function summarizeCluster(
   const tweets = tweetData || [];
   const combinedContent = tweets.map((t) => t.content).join("\n");
 
-  // Call Gemini to summarize
+  // Call Gemini to summarize with retry logic
   const prompt = `
 You are a Nigerian news summarizer. Summarize these tweets about ${cluster.primary_category} into 1-2 clear, factual sentences suitable for a news broadcast.
 
@@ -292,36 +311,63 @@ Rules:
 
 Summary:`;
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contents: [
+  try {
+    const summary = await retry(
+      async () => {
+        const response = await fetchWithTimeout(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${env.GEMINI_API_KEY}`,
           {
-            parts: [
-              {
-                text: prompt,
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    {
+                      text: prompt,
+                    },
+                  ],
+                },
+              ],
+              generationConfig: {
+                maxOutputTokens: 100,
+                temperature: 0.5,
               },
-            ],
+            }),
           },
-        ],
-        generationConfig: {
-          maxOutputTokens: 100,
-          temperature: 0.5,
-        },
-      }),
-    }
-  );
+          30000 // 30 second timeout
+        );
 
-  const result = (await response.json()) as any;
-  const summary =
-    result.candidates?.[0]?.content?.parts?.[0]?.text || cluster.summary;
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
+        }
 
-  return summary;
+        const result = (await response.json()) as GeminiResponse;
+
+        if (result.error) {
+          throw new Error(`Gemini API error: ${result.error.message}`);
+        }
+
+        const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (!text) {
+          console.warn('[SUMMARIZE] Gemini API returned unexpected format, using fallback');
+          return cluster.summary;
+        }
+
+        return text;
+      },
+      { maxRetries: 2, initialDelayMs: 1000 }
+    );
+
+    return summary;
+  } catch (error) {
+    console.error('[SUMMARIZE] Failed to generate summary:', (error as Error).message);
+    return cluster.summary; // Fallback to basic summary
+  }
 }
 
 // ============================================================================
@@ -372,6 +418,11 @@ export async function runPipeline(broadcastHour: Date = new Date()): Promise<voi
   try {
     console.log(`\n========== PIPELINE EXECUTION ${executionId} ==========\n`);
 
+    // Stage 0: Ingest tweets from scraper API
+    console.log("[PIPELINE] Fetching latest tweets from scraper...");
+    const ingestedCount = await ingestTweetsFromScraper(supabase, 200);
+    console.log(`[PIPELINE] Ingested ${ingestedCount} new tweets\n`);
+
     // Stage 1: Filter & Score
     const validTweets = await scoreAndFilterTweets(broadcastHour);
 
@@ -421,8 +472,8 @@ export async function runPipeline(broadcastHour: Date = new Date()): Promise<voi
 // Run periodically (cron job)
 // For development: run immediately
 if (require.main === module) {
-  runPipeline();
+  runPipeline().catch((err) => {
+    console.error('[FATAL] Pipeline execution failed:', err);
+    process.exit(1);
+  });
 }
-
-// For production: run every hour
-// setInterval(() => runPipeline(new Date()), 60 * 60 * 1000);

@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nigerian News Pipeline - Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: #94a3b8;
+            font-size: 1.1rem;
+        }
+
+        .refresh-btn {
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 2rem;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 1rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .refresh-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3);
+        }
+
+        .refresh-btn:active {
+            transform: translateY(0);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            transition: transform 0.3s, box-shadow 0.3s;
+            animation: slideUp 0.6s ease-out;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .card-icon {
+            font-size: 2rem;
+        }
+
+        .card-title {
+            font-size: 0.875rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        }
+
+        .card-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .card-label {
+            color: #64748b;
+            font-size: 0.875rem;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+            animation: pulse 2s infinite;
+        }
+
+        .status-healthy {
+            background: #10b981;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+        }
+
+        .status-warning {
+            background: #f59e0b;
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+        }
+
+        .status-error {
+            background: #ef4444;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+        }
+
+        .chart-container {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            animation: slideUp 0.8s ease-out;
+        }
+
+        .chart-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: #e2e8f0;
+        }
+
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .bar-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .bar-label {
+            min-width: 100px;
+            font-size: 0.875rem;
+            color: #94a3b8;
+        }
+
+        .bar-container {
+            flex: 1;
+            height: 30px;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 0.5rem;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%);
+            border-radius: 0.5rem;
+            transition: width 1s ease-out;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 0.75rem;
+        }
+
+        .bar-value {
+            color: white;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .service-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .service-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 0.5rem;
+            transition: background 0.3s;
+        }
+
+        .service-item:hover {
+            background: rgba(15, 23, 42, 0.8);
+        }
+
+        .service-name {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 500;
+        }
+
+        .service-status {
+            font-size: 0.875rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 0.25rem;
+            font-weight: 600;
+        }
+
+        .status-ok {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+        }
+
+        .status-fail {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: #64748b;
+        }
+
+        .spinner {
+            border: 3px solid rgba(148, 163, 184, 0.2);
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .last-updated {
+            text-align: center;
+            color: #64748b;
+            font-size: 0.875rem;
+            margin-top: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 1.75rem;
+            }
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Nigerian News Pipeline</h1>
+            <p class="subtitle">Real-time Monitoring Dashboard</p>
+            <button class="refresh-btn" onclick="loadDashboard()">🔄 Refresh Data</button>
+        </header>
+
+        <div id="dashboard">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Loading dashboard data...</p>
+            </div>
+        </div>
+
+        <div class="last-updated" id="lastUpdated"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000';
+        const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+        const SUPABASE_KEY = 'YOUR_SUPABASE_KEY';
+
+        async function fetchDashboardData() {
+            try {
+                // Fetch from API Gateway
+                const healthResponse = await fetch(`${API_BASE}/health`);
+                const health = await healthResponse.json();
+
+                const broadcastsResponse = await fetch(`${API_BASE}/broadcasts?limit=10`);
+                const broadcasts = await broadcastsResponse.json();
+
+                // Mock data for demonstration (replace with actual Supabase queries)
+                return {
+                    health,
+                    broadcasts: broadcasts.data || [],
+                    stats: {
+                        totalTweets: 1250,
+                        processedTweets: 1100,
+                        totalBroadcasts: 42,
+                        publishedBroadcasts: 38,
+                        audioFiles: 38,
+                        recentTweets: 85
+                    },
+                    categories: {
+                        'Politics': 320,
+                        'Economy': 280,
+                        'Security': 210,
+                        'Technology': 180,
+                        'Education': 120,
+                        'Health': 90,
+                        'Energy': 50
+                    },
+                    services: {
+                        database: health.database === 'connected',
+                        apiGateway: health.success,
+                        scraper: true, // Check scraper separately
+                        gemini: true,
+                        r2: true
+                    }
+                };
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                return null;
+            }
+        }
+
+        function renderDashboard(data) {
+            if (!data) {
+                document.getElementById('dashboard').innerHTML = `
+                    <div class="loading">
+                        <p style="color: #ef4444;">❌ Failed to load dashboard data</p>
+                        <p style="color: #64748b; margin-top: 0.5rem;">Make sure the API Gateway is running on ${API_BASE}</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const { stats, categories, services, broadcasts } = data;
+
+            const maxCategory = Math.max(...Object.values(categories));
+
+            document.getElementById('dashboard').innerHTML = `
+                <!-- Stats Grid -->
+                <div class="grid">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">📝</span>
+                            <span class="card-title">Total Tweets</span>
+                        </div>
+                        <div class="card-value">${stats.totalTweets.toLocaleString()}</div>
+                        <div class="card-label">${stats.processedTweets} processed</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">📻</span>
+                            <span class="card-title">Broadcasts</span>
+                        </div>
+                        <div class="card-value">${stats.totalBroadcasts}</div>
+                        <div class="card-label">${stats.publishedBroadcasts} published</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">🎵</span>
+                            <span class="card-title">Audio Files</span>
+                        </div>
+                        <div class="card-value">${stats.audioFiles}</div>
+                        <div class="card-label">Generated</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">⏰</span>
+                            <span class="card-title">Recent Activity</span>
+                        </div>
+                        <div class="card-value">${stats.recentTweets}</div>
+                        <div class="card-label">Tweets in last hour</div>
+                    </div>
+                </div>
+
+                <!-- Services Status -->
+                <div class="chart-container">
+                    <h2 class="chart-title">🔧 Services Status</h2>
+                    <div class="service-list">
+                        ${Object.entries(services).map(([name, status]) => `
+                            <div class="service-item">
+                                <div class="service-name">
+                                    <span class="status-indicator ${status ? 'status-healthy' : 'status-error'}"></span>
+                                    <span>${formatServiceName(name)}</span>
+                                </div>
+                                <span class="service-status ${status ? 'status-ok' : 'status-fail'}">
+                                    ${status ? '✅ Healthy' : '❌ Failed'}
+                                </span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <!-- Category Distribution -->
+                <div class="chart-container">
+                    <h2 class="chart-title">📂 Tweet Categories</h2>
+                    <div class="bar-chart">
+                        ${Object.entries(categories).map(([category, count]) => `
+                            <div class="bar-item">
+                                <div class="bar-label">${category}</div>
+                                <div class="bar-container">
+                                    <div class="bar-fill" style="width: ${(count / maxCategory) * 100}%">
+                                        <span class="bar-value">${count}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <!-- Recent Broadcasts -->
+                <div class="chart-container">
+                    <h2 class="chart-title">📻 Recent Broadcasts</h2>
+                    <div class="service-list">
+                        ${broadcasts.slice(0, 5).map(broadcast => `
+                            <div class="service-item">
+                                <div class="service-name">
+                                    <span class="status-indicator ${broadcast.is_published ? 'status-healthy' : 'status-warning'}"></span>
+                                    <span>Broadcast #${broadcast.id}</span>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="color: #94a3b8; font-size: 0.875rem;">
+                                        ${new Date(broadcast.broadcast_hour).toLocaleString()}
+                                    </div>
+                                    <div style="color: #64748b; font-size: 0.75rem; margin-top: 0.25rem;">
+                                        ${broadcast.total_tweets_used} tweets • ${broadcast.script_word_count} words
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('lastUpdated').textContent = 
+                `Last updated: ${new Date().toLocaleString()}`;
+        }
+
+        function formatServiceName(name) {
+            const names = {
+                database: 'Database (Supabase)',
+                apiGateway: 'API Gateway',
+                scraper: 'Scraper API',
+                gemini: 'Gemini API',
+                r2: 'R2 Storage'
+            };
+            return names[name] || name;
+        }
+
+        async function loadDashboard() {
+            document.getElementById('dashboard').innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading dashboard data...</p>
+                </div>
+            `;
+
+            const data = await fetchDashboardData();
+            renderDashboard(data);
+        }
+
+        // Load dashboard on page load
+        loadDashboard();
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadDashboard, 30000);
+    </script>
+</body>
+</html>
